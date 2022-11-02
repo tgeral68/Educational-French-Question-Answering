@@ -174,7 +174,8 @@ class FQAGPBDataset():
         higlight_token="<hl>", 
         input_processing=None,
         sampler = lambda x : x,
-        lang="fr"
+        input_lang="fr",
+        output_lang="fr"
         ):
         self.dataset = PBDataset(data)
         self.higlight_token = higlight_token
