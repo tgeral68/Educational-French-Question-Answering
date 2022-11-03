@@ -1,11 +1,17 @@
 import torch
 from torch import nn
-from torch.optim import AdamW
+from torch.optim import AdamW, SGD
 from torch.optim.lr_scheduler import LinearLR
 from torch.nn import BCELoss
+import json
 
 import pytorch_lightning as pl
 from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
+
+import json 
+import pandas as pd
+import os
+
 LANGUAGE_MAP = {
     "fr" : "fr_XX",
     "en" : "en_XX",
@@ -47,7 +53,8 @@ class MBARTQG(pl.LightningModule):
             self,
             pretrained_name = "facebook/mbart-large-50-many-to-many-mmt",
             fixed_encoder = False,
-            validation_callback = None
+            validation_callback = None, 
+            log_dir = None
         ):
         super().__init__()
         self.fixed_encoder = fixed_encoder
@@ -56,7 +63,7 @@ class MBARTQG(pl.LightningModule):
         self.tokenizer.add_tokens(['<hl>'], special_tokens=True)
         self.model.resize_token_embeddings(len(self.tokenizer))
         self.validation_callback = validation_callback
-
+        self.log_dir = log_dir
     
     def training_step(self, batch, batch_idx):
         output =\
@@ -71,9 +78,9 @@ class MBARTQG(pl.LightningModule):
         optimizable_parameters = list(self.model.model.decoder.parameters()) + list(self.model.lm_head.parameters()) 
         if(not self.fixed_encoder):
             optimizable_parameters = self.model.parameters()
-        optimizer = AdamW(optimizable_parameters, lr=1e-4)
+        optimizer = SGD(optimizable_parameters, lr=1e-3)
         scheduler = {
-            "scheduler": LinearLR(optimizer, total_iters = 1000, start_factor= 1.0 / 1000.),
+            "scheduler": LinearLR(optimizer, total_iters = 100, start_factor= 1.0 / 1000.),
             "interval": "step",
             'name': 'lr_scheduler',
             "frequency": 1
@@ -92,27 +99,28 @@ class MBARTQG(pl.LightningModule):
         loss = output.loss 
 
         # validation metrics based on generative approach
-        generated_batch = self.model.generate(
-            input_ids = batch['input_ids'],
-            attention_mask = batch['attention_mask'],
-            forced_bos_token_id=self.tokenizer.lang_code_to_id[LANGUAGE_MAP['fr']]
-            )
+        with torch.no_grad():
+            generated_batch = self.model.generate(
+                input_ids = batch['input_ids'],
+                attention_mask = batch['attention_mask'],
+                forced_bos_token_id=self.tokenizer.lang_code_to_id[LANGUAGE_MAP['fr']]
+                )
         generated_text = self.tokenizer.batch_decode(generated_batch, skip_special_tokens=True)
         ground_truth_text = self.tokenizer.batch_decode(batch['labels'], skip_special_tokens=True)
-        print(generated_text, ground_truth_text)
-        # scores = scores_callback(generated_text, ground_truth_text)
 
         self.log("val/loss",  loss.item(), reduce_fx="mean", sync_dist=True)
         return {"generated_text": generated_text, "ground_truth_text":ground_truth_text}
     
     def validation_epoch_end(self, batch, *kargs, **kwargs):
-        print("\n\n", batch, "\n\n", kargs)
         predictions = sum([b["generated_text"] for b in batch], [])
         references = sum([b["ground_truth_text"] for b in batch], [])
         if self.validation_callback is not None:
             validation_log =  self.validation_callback(predictions, references)
             for k, v in validation_log.items():
                 self.log("val/"+k, v)
+        if self.log_dir != None:
+            df = pd.DataFrame({"predictions": predictions, "references": references})
+            df.to_csv(os.path.join(self.log_dir, "validation_prediction-"+str(self.current_epoch)+".csv"))
 
     def on_after_backward(self, *kargs, **kwargs):
         self.model.model.shared.weight._grad[:-1] = 0
