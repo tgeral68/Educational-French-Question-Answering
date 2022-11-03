@@ -1,7 +1,7 @@
 import os
 import json
 import tqdm
-
+import numpy as np
 
 
 def to_hf(dataset, dataset_name, split_name, dataset_folder='$EFQADATA'):
@@ -74,3 +74,36 @@ class SelectDataset():
     def __getitem__(self, index):
         cdata = self.dataset[index]
         return cdata[self.key]
+
+class TokenizerDataset:
+    def  __init__(self, dataset, input_tokenizer, output_tokenizer=None):
+        self.dataset = dataset
+        self.input_tokenizer = input_tokenizer
+        self.output_tokenizer = output_tokenizer if(output_tokenizer is not None) else input_tokenizer
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, index):
+        data = self.dataset[index]
+        return {
+            **self.input_tokenizer(data['src'],return_tensors="pt",  padding='longest', truncation=True, max_length=512),
+            "labels": self.output_tokenizer(data['tgt'], return_tensors="pt",  padding='longest', truncation=True, max_length=512)
+        }
+
+class KeyMapDataset:
+    def __init__(self, dataset, key_map = {
+        "input_lang": {'fr':  250008, "en": 250004},
+        "output_lang": {'fr':  250008, "en": 250004}
+    }):
+        self.dataset = dataset
+        self.key_map = key_map
+
+    def __len__(self):
+        return len(self.dataset)
+    
+    def __getitem__(self, index):
+        data = self.dataset[index]
+        for k, v in self.key_map.items():
+            data[k] = v[data[k]]
+        return data

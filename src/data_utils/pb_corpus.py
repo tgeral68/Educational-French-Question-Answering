@@ -182,7 +182,8 @@ class FQAGPBDataset():
         self.input_processing =\
             input_processing if(input_processing is not None) else FQAGPBDataset.default_processing
         self.sampler = sampler
-        self.lang = lang
+        self.input_lang = input_lang
+        self.output_lang = output_lang
 
     def __len__(self):
         return len(self.dataset)
@@ -205,7 +206,7 @@ class FQAGPBDataset():
                 context, is_default = self.input_processing(context, start_pos, end_pos)
                 
                 items += [{"is_default": is_default, "id": index, "question": question, "context": ctx, "question_type": question_type} for ctx in context]
-        return {**items[0], 'lang':self.lang}
+        return {**items[0], 'input_lang':self.input_lang, 'output_lang': self.output_lang}
                 
             
         
