@@ -15,27 +15,33 @@ LANGUAGE_MAP = {
     "tl" : "tl_XX"
 }
 
+class MBARTQGDataLoaderCollator:
+    def __init__(self, tokenizer):
+        self.tokenizer = tokenizer
 
+    def __call__(self, batch_list: list) -> dict:
+        context = [b['context'] for b in batch_list]
+        question = [b['question'] for b in batch_list]
+        input_lang = [b['input_lang'] for b in batch_list]
+        output_lang = [b['output_lang'] for b in batch_list]
 
-
-
-class MBARTQG(pl.LightningModule):
-    def prepare_input(self, batch: dict) -> dict:
-
-        source = self.tokenizer(batch['context'], return_tensors="pt",  padding='longest', truncation=True, max_length=512)
-        target = self.tokenizer(batch['question'], return_tensors="pt",  padding='longest', truncation=True, max_length=512)
+        source = self.tokenizer(context, return_tensors="pt",  padding='longest', truncation=True, max_length=512)
+        target = self.tokenizer(question, return_tensors="pt",  padding='longest', truncation=True, max_length=512)
 
         source_input_ids = source.input_ids
         target_input_ids = target.input_ids
 
-        source_input_ids[:, 0] = batch["input_lang"]
-        target_input_ids[:, 0] = batch["output_lang"]
+        source_input_ids[:, 0] = torch.LongTensor(input_lang)
+        target_input_ids[:, 0] = torch.LongTensor(output_lang)
         
         return {
             "input_ids": source_input_ids,
             "attention_mask": source.attention_mask,
             "labels": target_input_ids
         }
+
+class MBARTQG(pl.LightningModule):
+
 
     def __init__(
             self,
@@ -49,20 +55,20 @@ class MBARTQG(pl.LightningModule):
         self.tokenizer = MBart50TokenizerFast.from_pretrained(pretrained_name)
         self.tokenizer.add_tokens(['<hl>'], special_tokens=True)
         self.model.resize_token_embeddings(len(self.tokenizer))
-
+        self.validation_callback = validation_callback
 
     
     def training_step(self, batch, batch_idx):
         output =\
             self.model(
-                self.prepare_input(batch)
+                **batch
             )
         loss = output.loss 
         self.log("training_reconstruction_loss",  output.loss.item(), reduce_fx="mean")
         return loss
     
     def configure_optimizers(self):
-        optimizable_parameters = list(self.model.decoder.parameters()) + list(self.model.lm_head.parameters()) 
+        optimizable_parameters = list(self.model.model.decoder.parameters()) + list(self.model.lm_head.parameters()) 
         if(not self.fixed_encoder):
             optimizable_parameters = self.model.parameters()
         optimizer = AdamW(optimizable_parameters, lr=1e-4)
@@ -89,20 +95,24 @@ class MBARTQG(pl.LightningModule):
         generated_batch = self.model.generate(
             input_ids = batch['input_ids'],
             attention_mask = batch['attention_mask'],
-            forced_bos_token_id=tokenizer.lang_code_to_id[MBARTQG.LANGUAGE_MAP['fr']]
+            forced_bos_token_id=self.tokenizer.lang_code_to_id[LANGUAGE_MAP['fr']]
             )
         generated_text = self.tokenizer.batch_decode(generated_batch, skip_special_tokens=True)
         ground_truth_text = self.tokenizer.batch_decode(batch['labels'], skip_special_tokens=True)
-        scores = scores_callback(generated_text, ground_truth_text)
+        print(generated_text, ground_truth_text)
+        # scores = scores_callback(generated_text, ground_truth_text)
 
         self.log("val/loss",  loss.item(), reduce_fx="mean", sync_dist=True)
         return {"generated_text": generated_text, "ground_truth_text":ground_truth_text}
     
-    def validation_step_end(self, batch, outs):
+    def validation_epoch_end(self, batch, *kargs, **kwargs):
+        print("\n\n", batch, "\n\n", kargs)
+        predictions = sum([b["generated_text"] for b in batch], [])
+        references = sum([b["ground_truth_text"] for b in batch], [])
         if self.validation_callback is not None:
-            validation_log =  self.validation_callback(outs)
+            validation_log =  self.validation_callback(predictions, references)
             for k, v in validation_log.items():
                 self.log("val/"+k, v)
 
-    def on_after_backward(self, trainer, pl_module):
-        self.model.shared.weight._grad[:-1] = 0
+    def on_after_backward(self, *kargs, **kwargs):
+        self.model.model.shared.weight._grad[:-1] = 0
