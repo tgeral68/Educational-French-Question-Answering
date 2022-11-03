@@ -1,71 +1,86 @@
 import torch
 from torch import nn
-from torch.optim import AdamW
+from torch.optim import AdamW, SGD
 from torch.optim.lr_scheduler import LinearLR
 from torch.nn import BCELoss
+import json
 
 import pytorch_lightning as pl
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 
+import json 
+import pandas as pd
+import os
+
+LANGUAGE_MAP = {
+    "fr" : "fr_XX",
+    "en" : "en_XX",
+    "es" : "es_XX",
+    "ja" : "ja_XX",
+    "pt" : "pt_XX",
+    "tl" : "tl_XX"
+}
+
+class MBARTQGDataLoaderCollator:
+    def __init__(self, tokenizer):
+        self.tokenizer = tokenizer
+
+    def __call__(self, batch_list: list) -> dict:
+        context = [b['context'] for b in batch_list]
+        question = [b['question'] for b in batch_list]
+        input_lang = [b['input_lang'] for b in batch_list]
+        output_lang = [b['output_lang'] for b in batch_list]
+
+        source = self.tokenizer(context, return_tensors="pt",  padding='longest', truncation=True, max_length=512)
+        target = self.tokenizer(question, return_tensors="pt",  padding='longest', truncation=True, max_length=512)
+
+        source_input_ids = source.input_ids
+        target_input_ids = target.input_ids
+
+        source_input_ids[:, 0] = torch.LongTensor(input_lang)
+        target_input_ids[:, 0] = torch.LongTensor(output_lang)
+        
+        return {
+            "input_ids": source_input_ids,
+            "attention_mask": source.attention_mask,
+            "labels": target_input_ids
+        }
 
 class MBARTQG(pl.LightningModule):
-    LANGUAGE_MAP = {
-        "fr" : "fr_XX",
-        "en" : "en_XX",
-        "es" : "es_XX",
-        "ja" : "ja_XX",
-        "pt" : "pt_XX",
-        "tl" : "tl_XX"
-    }
+
 
     def __init__(
             self,
-            pretrained_name="facebook/mbart-large-50-many-to-many-mmt",
-            load_lang=["fr", "en"]
+            pretrained_name = "facebook/mbart-large-50-many-to-many-mmt",
+            fixed_encoder = False,
+            validation_callback = None, 
+            log_dir = None
         ):
         super().__init__()
-        self.model = AutoModelForSeq2SeqLM.from_pretrained(pretrained_name)
-        self.tokenizers = {lang: AutoTokenizer.from_pretrained(pretrained_name, src_lang=LANGUAGE_MAP[lang])
-                           for lang in load_lang}
-        tokenizer.add_tokens(['<hl>'], special_tokens=True) for tokenizer in self.tokenizers.values 
-        self.model.resize_token_embeddings(len(next(iter(self.tokenizers.values()))))
-
+        self.fixed_encoder = fixed_encoder
+        self.model = MBartForConditionalGeneration.from_pretrained(pretrained_name)
+        self.tokenizer = MBart50TokenizerFast.from_pretrained(pretrained_name)
+        self.tokenizer.add_tokens(['<hl>'], special_tokens=True)
+        self.model.resize_token_embeddings(len(self.tokenizer))
+        self.validation_callback = validation_callback
+        self.log_dir = log_dir
     
     def training_step(self, batch, batch_idx):
-        # training_step defines the train loop.
-        # print("DEVICE", batch_idx, self.device, batch["index"], flush=True)
         output =\
             self.model(
-                input_ids = batch['input_ids'],
-                attention_mask = batch['attention_mask'],
-                decoder_input_ids = batch['decoder_input_ids'],
-                labels = batch['labels']
+                **batch
             )
-        
-        selection_loss = batch['input_ids'].new(1).zero_()[0].float()
-        if(self.psl > 0):
-            if(len(batch["selection_vector"][batch["selection_vector"] == -100]) != batch["selection_vector"].shape.numel()):
-                pred = torch.sigmoid(self.linear_classifier(output.encoder_last_hidden_state).squeeze(-1))
-
-                pred = pred[batch["selection_vector"] != -100]
-                sel_gt = batch["selection_vector"][batch["selection_vector"] != -100] 
-            
-                selection_loss = self.bce_loss(pred, sel_gt)
-
-        loss = (1-self.psl) * output.loss + (self.psl) * selection_loss
-        self.log("training_loss",  loss.item(), reduce_fx="mean")
+        loss = output.loss 
         self.log("training_reconstruction_loss",  output.loss.item(), reduce_fx="mean")
-        self.log("training_selection_loss", selection_loss.item(), reduce_fx="mean")
         return loss
     
-    def predict_selection(self, batch):
-
-        data = self.model.encoder(input_ids=batch['input_ids'], attention_mask=batch['attention_mask'])
-
     def configure_optimizers(self):
-        optimizer = AdamW(self.parameters(), lr=1e-4)
+        optimizable_parameters = list(self.model.model.decoder.parameters()) + list(self.model.lm_head.parameters()) 
+        if(not self.fixed_encoder):
+            optimizable_parameters = self.model.parameters()
+        optimizer = SGD(optimizable_parameters, lr=1e-3)
         scheduler = {
-            "scheduler": LinearLR(optimizer, total_iters=1000, start_factor=1.0 / 1000.),
+            "scheduler": LinearLR(optimizer, total_iters = 100, start_factor= 1.0 / 1000.),
             "interval": "step",
             'name': 'lr_scheduler',
             "frequency": 1
@@ -73,26 +88,39 @@ class MBARTQG(pl.LightningModule):
         return [optimizer], [scheduler]
 
     def validation_step(self, batch, batch_idx):
-        # training_step defines the train loop.
+
+        # validation loss
         output =\
             self.model(
                 input_ids = batch['input_ids'],
                 attention_mask = batch['attention_mask'],
-                decoder_input_ids = batch['decoder_input_ids'],
                 labels = batch['labels']
             )
-        
-        selection_loss = batch['input_ids'].new(1).zero_()[0].float()
-        if(self.psl > 0):
-           if(len(batch["selection_vector"][batch["selection_vector"] == -100]) != batch["selection_vector"].shape.numel()):
-                pred = torch.sigmoid(self.linear_classifier(output.encoder_last_hidden_state).squeeze(-1))
+        loss = output.loss 
 
-                pred = pred[batch["selection_vector"] != -100]
-                sel_gt = batch["selection_vector"][batch["selection_vector"] != -100] 
-            
-                selection_loss = self.bce_loss(pred, sel_gt)
+        # validation metrics based on generative approach
+        with torch.no_grad():
+            generated_batch = self.model.generate(
+                input_ids = batch['input_ids'],
+                attention_mask = batch['attention_mask'],
+                forced_bos_token_id=self.tokenizer.lang_code_to_id[LANGUAGE_MAP['fr']]
+                )
+        generated_text = self.tokenizer.batch_decode(generated_batch, skip_special_tokens=True)
+        ground_truth_text = self.tokenizer.batch_decode(batch['labels'], skip_special_tokens=True)
 
-        loss = (1-self.psl) * output.loss + (self.psl) * selection_loss
-        self.log("val_loss",  loss.item(), reduce_fx="mean", sync_dist=True)
-        self.log("val_reconstruction_loss",  output.loss.item(), reduce_fx="mean", sync_dist=True)
-        self.log("val_selection_loss", selection_loss.item(), reduce_fx="mean", sync_dist=True)
+        self.log("val/loss",  loss.item(), reduce_fx="mean", sync_dist=True)
+        return {"generated_text": generated_text, "ground_truth_text":ground_truth_text}
+    
+    def validation_epoch_end(self, batch, *kargs, **kwargs):
+        predictions = sum([b["generated_text"] for b in batch], [])
+        references = sum([b["ground_truth_text"] for b in batch], [])
+        if self.validation_callback is not None:
+            validation_log =  self.validation_callback(predictions, references)
+            for k, v in validation_log.items():
+                self.log("val/"+k, v)
+        if self.log_dir != None:
+            df = pd.DataFrame({"predictions": predictions, "references": references})
+            df.to_csv(os.path.join(self.log_dir, "validation_prediction-"+str(self.current_epoch)+".csv"))
+
+    def on_after_backward(self, *kargs, **kwargs):
+        self.model.model.shared.weight._grad[:-1] = 0

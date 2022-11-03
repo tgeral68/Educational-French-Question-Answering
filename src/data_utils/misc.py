@@ -23,3 +23,4 @@ class CollatePadding():
         tr_batch = [self.padder(x, size=max_len) for x in  batch]
         return torch.cat(tr_batch, dim=self.stack_dim)
 
+
