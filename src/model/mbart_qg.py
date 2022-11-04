@@ -78,7 +78,7 @@ class MBARTQG(pl.LightningModule):
         optimizable_parameters = list(self.model.model.decoder.parameters()) + list(self.model.lm_head.parameters()) 
         if(not self.fixed_encoder):
             optimizable_parameters = self.model.parameters()
-        optimizer = SGD(optimizable_parameters, lr=1e-3)
+        optimizer = AdamW(optimizable_parameters, lr=1e-4)
         scheduler = {
             "scheduler": LinearLR(optimizer, total_iters = 100, start_factor= 1.0 / 1000.),
             "interval": "step",
