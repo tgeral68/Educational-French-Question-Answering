@@ -136,4 +136,5 @@ class MBARTQG(pl.LightningModule):
                 df.to_csv(os.path.join(self.log_dir, "validation_prediction-"+str(self.current_epoch)+".csv"))
 
     def on_after_backward(self, *kargs, **kwargs):
-        self.model.model.shared.weight._grad[:-1] = 0
+        if(self.fixed_encoder):
+            self.model.model.shared.weight._grad[:-1] = 0
