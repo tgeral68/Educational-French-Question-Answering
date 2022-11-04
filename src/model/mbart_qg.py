@@ -84,7 +84,7 @@ class MBARTQG(pl.LightningModule):
             optimizable_parameters = self.model.parameters()
         optimizer = OPTIM_MAP[self.optimizer_name](optimizable_parameters, lr=self.learning_rate)
         scheduler = {
-            "scheduler": LinearLR(optimizer, total_iters = 100, start_factor= 1.0 / 1000.),
+            "scheduler": LinearLR(optimizer, total_iters = 1000, start_factor= 1.0 / 1000.),
             "interval": "step",
             'name': 'lr_scheduler',
             "frequency": 1
@@ -122,7 +122,7 @@ class MBARTQG(pl.LightningModule):
         if self.validation_callback is not None:
             validation_log =  self.validation_callback(predictions, references)
             for k, v in validation_log.items():
-                self.log("val/"+k, v)
+                self.log("val/"+k, v, sync_dist=True)
         if self.log_dir != None:
             df = pd.DataFrame({"predictions": predictions, "references": references})
             df.to_csv(os.path.join(self.log_dir, "validation_prediction-"+str(self.current_epoch)+".csv"))

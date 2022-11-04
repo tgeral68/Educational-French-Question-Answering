@@ -29,7 +29,7 @@ parser.add_argument('--enable-progress-bar', dest="enable_progress_bar", default
 
 parser.add_argument('--limit-train-batches', dest="limit_train_batches", default=20000, type=int,
                     help='Limit the number of batches for a trianing epoch' )
-parser.add_argument('--log-every-n-steps', dest="log_every_n_steps", default=128, type=int,
+parser.add_argument('--log-every-n-steps', dest="log_every_n_steps", default=16, type=int,
                     help='log frequency' )
 
 
@@ -95,7 +95,7 @@ def main():
     train_datasets = {}
     valid_datasets = {}
 
-
+    print("TRAINING SETS ", args.training_set, flush=True)
     for dataset_name in args.training_set: 
         with open(os.path.join(data_folder, dataset_name)) as f:
             il, ol = dataset_name.split('.')[0].split('-')[-2], dataset_name.split('.')[0].split('-')[-1]
@@ -105,6 +105,7 @@ def main():
                 sampler = random_sampler,
                 input_lang = il, output_lang = ol
             )
+    print("TRAINING SETS ", args.validation_set, flush=True)
     for dataset_name in args.validation_set: 
         with open(os.path.join(data_folder, dataset_name)) as f:
             il, ol = dataset_name.split('.')[0].split('-')[-2], dataset_name.split('.')[0].split('-')[-1]
@@ -132,8 +133,8 @@ def main():
     lr_monitor = LearningRateMonitor(logging_interval='step')
 
     # instanciate the training and validation dataloader
-    train_dl  = DataLoader(KeyMapDataset(MixedDataset(*train_datasets.values())), batch_size = 2, shuffle=True, num_workers=2, collate_fn=MBARTQGDataLoaderCollator(model.tokenizer))
-    valid_dl  = DataLoader(KeyMapDataset(MixedDataset(*valid_datasets.values())), batch_size = 2, shuffle=False, num_workers=2, collate_fn=MBARTQGDataLoaderCollator(model.tokenizer))
+    train_dl  = DataLoader(KeyMapDataset(MixedDataset(*train_datasets.values())), batch_size=4, shuffle=True, num_workers=4, collate_fn=MBARTQGDataLoaderCollator(model.tokenizer))
+    valid_dl  = DataLoader(KeyMapDataset(MixedDataset(*valid_datasets.values())), batch_size=4, shuffle=False, num_workers=4, collate_fn=MBARTQGDataLoaderCollator(model.tokenizer))
 
     # instanciate the differente callback for saving the model according to the different metrics
     checkpoint_callback_val_loss = ModelCheckpoint(monitor='val/loss', save_top_k=1, mode="min", filename="val-loss-checkpoint-{epoch:02d}-{val/loss:.2f}")
@@ -155,7 +156,7 @@ def main():
         limit_train_batches=args.limit_train_batches, 
         max_epochs=250, 
         deterministic=True,
-        accumulate_grad_batches=32,
+        accumulate_grad_batches=8,
         accelerator='gpu' if(not args.cpu_only) else 'cpu',
         devices=-1,
         auto_select_gpus=False
