@@ -64,11 +64,10 @@ def main():
         rouge = HFMetric('rouge', lambda x : x['rougeL'], tokenizer = st)
     )
 
-    # TODO : Change the definition of the env variables
-    os.environ['EFQADATA'] = '/people/gerald/Documents/repositories/Educational-French-Question-Answering/dataset'
 
     # Raw data are located in the folder specified by EFQADATA env var in the folder source
     data_folder = os.path.expandvars("$EFQADATA/source")
+    log_folder = os.path.expandvars("$EFQALOG")
 
 
     # Loading the training and validation sets
@@ -99,11 +98,11 @@ def main():
         pretrained_name = "facebook/mbart-large-50-many-to-many-mmt", # the name of the pretrain model
         fixed_encoder = args.fixed_encoder, # Do we optimize the encoder if false finetuned all the model
         validation_callback = validation_metrics, # A validation metric callback must output a dictionary {metric_name_1: value_1, metric_name_2 value_2}
-        log_dir = os.path.join(os.path.expandvars("$QA_LOG"), args.name) # The log directory of the model it will save the validation output within it
+        log_dir = os.path.join(log_folder, args.name) # The log directory of the model it will save the validation output within it
     )
 
     # initialise the logger (using the default tensorboard logger from lightning)
-    tb_logger = pl_loggers.TensorBoardLogger(save_dir=os.path.expandvars("$QA_LOG"), name=args.name) 
+    tb_logger = pl_loggers.TensorBoardLogger(save_dir=log_folder, name=args.name) 
     tb_logger.log_hyperparams(vars(args))
     # We also log the learning rate
     lr_monitor = LearningRateMonitor(logging_interval='step')
