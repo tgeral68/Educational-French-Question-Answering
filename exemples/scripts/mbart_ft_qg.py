@@ -1,7 +1,7 @@
 import pytorch_lightning as pl
 from pytorch_lightning import loggers as pl_loggers
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
-
+from pytorch_lightning import Trainer, seed_everything
 from src.model.mbart_qg import MBARTQG, MBARTQGDataLoaderCollator
 from src.eval_utils.evaluate_utils import HFMetric, MultiHFMetric
 
@@ -19,6 +19,14 @@ parser.add_argument('--cpu-only', dest="cpu_only", default=False, action='store_
                     help='do not use GPUs (for dev only)')
 parser.add_argument('--enable-progress-bar', dest="enable_progress_bar", default=False, action='store_true',
                     help='show progress bar' )
+
+
+parser.add_argument('--limit-train-batches', dest="limit_train_batches", default=20000, type=int,
+                    help='Limit the number of batches for a trianing epoch' )
+parser.add_argument('--log-every-n-steps', dest="log_every_n_steps", default=20000, type=int,
+                    help='log frequency' )
+
+                    
 parser.add_argument('--name', dest="name", default="default",
                     help='set the name of the experiment' )
 parser.add_argument('--resume-from-checkpoint', dest="resume_from_checkpoint", type=str,  default=None,
@@ -34,11 +42,12 @@ parser.add_argument('--validation-set', metavar='validation_set', type=str, narg
                         "fquad-fr-fr.pb.json", "piaf-fr-fr.pb.json"
                     ]
                     help='the name of the validation set to use')
-
 args = parser.parse_args()
 
 
 def main():
+
+    seed_everything(42, workers=True)
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
     # Loading the metrics
@@ -118,13 +127,17 @@ def main():
     # instanciate the trainer
     trainer = pl.Trainer(
         logger=tb_logger, 
-        log_every_n_steps=16, 
+        log_every_n_steps=args.log_every_n_steps, 
         callbacks=callbacks, 
         enable_progress_bar=True,
-        limit_train_batches=10000, 
+        limit_train_batches=args.limit_train_batches, 
         max_epochs=250, 
+        deterministic=True,
         accumulate_grad_batches=64,
-        accelerator='cpu'
+        accelerator='gpu' if(not args.cpu_only) else 'cpu',
+        devices=-1,
+        auto_select_gpus=True,
+        strategy="ddp"
     )
     # start training
     trainer.fit(
