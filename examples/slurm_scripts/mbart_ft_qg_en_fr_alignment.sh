@@ -18,7 +18,7 @@ export EFQALOG=$WORK/LTC/LTC-LOGS
 
 if [ -z "$1" ]
     then
-        srun python -m examples.scripts.mbart_ft_qg --name mbart_ft_qg_en_fr --training-set fquad-fr-en.pb.json fquad-fr-fr.pb.json squad-en-en.pb.json squad_en_fr.pb.json piaf-fr-fr.pb.json piaf-fr-en.pb.json  --validation-set fquad-fr-fr.pb.json piaf-fr-fr.pb.json
+        srun python -m examples.scripts.mbart_ft_qg --name mbart_ft_qg_en_fr --training-set fquad-fr-en.pb.json fquad-fr-fr.pb.json squad-en-en.pb.json squad-en-fr.pb.json piaf-fr-fr.pb.json piaf-fr-en.pb.json  --validation-set fquad-fr-fr.pb.json piaf-fr-fr.pb.json
     else
         srun python -m examples.scripts.mbart_ft_qg --name mbart_ft_qg_en_fr --training-set fquad-fr-en.pb.json fquad-fr-fr.pb.json squad-en-en.pb.json squad_en_fr.pb.json piaf-fr-fr.pb.json piaf-fr-en.pb.json  --validation-set fquad-fr-fr.pb.json piaf-fr-fr.pb.json --resume-from-checkpoint $1
 fi
