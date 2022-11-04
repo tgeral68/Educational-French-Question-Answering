@@ -7,7 +7,7 @@ import json
 
 import pytorch_lightning as pl
 from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
-
+from .optim_utils import OPTIM_MAP
 import json 
 import pandas as pd
 import os
@@ -54,7 +54,9 @@ class MBARTQG(pl.LightningModule):
             pretrained_name = "facebook/mbart-large-50-many-to-many-mmt",
             fixed_encoder = False,
             validation_callback = None, 
-            log_dir = None
+            log_dir = None,
+            optimizer = "adamw",
+            learning_rate = 1e-4
         ):
         super().__init__()
         self.fixed_encoder = fixed_encoder
@@ -64,6 +66,8 @@ class MBARTQG(pl.LightningModule):
         self.model.resize_token_embeddings(len(self.tokenizer))
         self.validation_callback = validation_callback
         self.log_dir = log_dir
+        self.optimizer_name = optimizer
+        self.learning_rate = learning_rate
     
     def training_step(self, batch, batch_idx):
         output =\
@@ -78,7 +82,7 @@ class MBARTQG(pl.LightningModule):
         optimizable_parameters = list(self.model.model.decoder.parameters()) + list(self.model.lm_head.parameters()) 
         if(not self.fixed_encoder):
             optimizable_parameters = self.model.parameters()
-        optimizer = AdamW(optimizable_parameters, lr=1e-4)
+        optimizer = OPTIM_MAP[self.optimizer_name](optimizable_parameters, lr=self.learning_rate)
         scheduler = {
             "scheduler": LinearLR(optimizer, total_iters = 100, start_factor= 1.0 / 1000.),
             "interval": "step",

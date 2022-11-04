@@ -3,7 +3,7 @@ import json
 import os
 
 from torch.utils.data import DataLoader
-
+import random
 import pytorch_lightning as pl
 from pytorch_lightning import loggers as pl_loggers
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
@@ -37,6 +37,10 @@ parser.add_argument('--name', dest="name", default="default",
                     help='set the name of the experiment' )
 parser.add_argument('--resume-from-checkpoint', dest="resume_from_checkpoint", type=str,  default=None,
                     help='path if resuming training from checkpoint' )
+parser.add_argument('--optimizer', dest="optimizer", type=str,  default="adamw",
+                    help='the name of the optimizer [adamw, sgd]' )
+parser.add_argument('--lr', dest="lr", type=float,  default=1e-4,
+                    help='the learning rate value' )
 parser.add_argument('--training-set', metavar='training_set', type=str, nargs='+',
                     default=["fquad-fr-fr.pb.json", "fquad-fr-en.pb.json",
                         "piaf-fr-en.pb.json", "piaf-fr-fr.pb.json",
@@ -104,7 +108,9 @@ def main():
         pretrained_name = "facebook/mbart-large-50-many-to-many-mmt", # the name of the pretrain model
         fixed_encoder = args.fixed_encoder, # Do we optimize the encoder if false finetuned all the model
         validation_callback = validation_metrics, # A validation metric callback must output a dictionary {metric_name_1: value_1, metric_name_2 value_2}
-        log_dir = os.path.join(log_folder, args.name) # The log directory of the model it will save the validation output within it
+        log_dir = os.path.join(log_folder, args.name), # The log directory of the model it will save the validation output within it
+        optimizer = args.optimizer,
+        learning_rate = args.lr
     )
 
     # initialise the logger (using the default tensorboard logger from lightning)
@@ -118,9 +124,9 @@ def main():
     valid_dl  = DataLoader(KeyMapDataset(MixedDataset(*valid_datasets.values())), batch_size = 2, shuffle=False, num_workers=2, collate_fn=MBARTQGDataLoaderCollator(model.tokenizer))
 
     # instanciate the differente callback for saving the model according to the different metrics
-    checkpoint_callback_val_loss = ModelCheckpoint(monitor='val/loss', save_top_k=2, mode="min", filename="val-loss-checkpoint-{epoch:02d}-{val_loss:.2f}")
-    checkpoint_callback_val_sacrebleu = ModelCheckpoint(monitor='val/sacrebleu', save_top_k=2, mode="max", filename="val-sacrebleu-checkpoint-{epoch:02d}-{val_loss:.2f}")
-    checkpoint_callback_val_rouge = ModelCheckpoint(monitor='val/rouge', save_top_k=2, mode="max", filename="val-rouge-checkpoint-{epoch:02d}-{val_loss:.2f}")
+    checkpoint_callback_val_loss = ModelCheckpoint(monitor='val/loss', save_top_k=1, mode="min", filename="val-loss-checkpoint-{epoch:02d}-{val/loss:.2f}")
+    checkpoint_callback_val_sacrebleu = ModelCheckpoint(monitor='val/sacrebleu', save_top_k=1, mode="max", filename="val-sacrebleu-checkpoint-{epoch:02d}-{val/sacrebleu:.2f}")
+    checkpoint_callback_val_rouge = ModelCheckpoint(monitor='val/rouge', save_top_k=1, mode="max", filename="val-rouge-checkpoint-{epoch:02d}-{val/rouge:.2f}")
 
     callbacks = [
         lr_monitor,
@@ -141,8 +147,7 @@ def main():
         accumulate_grad_batches=32,
         accelerator='gpu' if(not args.cpu_only) else 'cpu',
         devices=-1,
-        auto_select_gpus=True,
-        strategy="ddp"
+        auto_select_gpus=False
     )
     # start training
     trainer.fit(
