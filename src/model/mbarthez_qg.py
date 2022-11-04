@@ -38,7 +38,7 @@ class MBARTHEZQGDataLoaderCollator:
         source_input_ids = source.input_ids
         target_input_ids = target.input_ids
 #         No source language input for MBarthez
-        source_input_ids[:, 0] = torch.LongTensor(input_lang)
+#         source_input_ids[:, 0] = torch.LongTensor(input_lang)
         target_input_ids[:, 0] = torch.LongTensor(output_lang)
         
         return {
@@ -81,7 +81,7 @@ class MBARTHEZQG(MBARTQG):
             generated_batch = self.model.generate(
                 input_ids = batch['input_ids'],
                 attention_mask = batch['attention_mask'],
-                forced_bos_token_id=self.tokenizer.convert_tokens_to_ids[LANGUAGE_MAP['fr']],
+                forced_bos_token_id=self.tokenizer.convert_tokens_to_ids([LANGUAGE_MAP['fr']]),
                 max_new_tokens=200
             )
         generated_text = self.tokenizer.batch_decode(generated_batch, skip_special_tokens=True)

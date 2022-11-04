@@ -131,8 +131,16 @@ def main():
     # We also log the learning rate
     lr_monitor = LearningRateMonitor(logging_interval='step')
     # instanciate the training and validation dataloader
-    train_dl  = DataLoader(KeyMapDataset(MixedDataset(*train_datasets.values())), batch_size = 2, shuffle=True, num_workers=2, collate_fn=MBARTHEZQGDataLoaderCollator(model.tokenizer))
-    valid_dl  = DataLoader(KeyMapDataset(MixedDataset(*valid_datasets.values())), batch_size = 2, shuffle=False, num_workers=2, collate_fn=MBARTHEZQGDataLoaderCollator(model.tokenizer))
+    key_map = {
+        "input_lang": {'fr': model.tokenizer.convert_tokens_to_ids('[fr_XX]'),
+                       "en": model.tokenizer.convert_tokens_to_ids('[en_XX]')},
+        "output_lang": {'fr':  model.tokenizer.convert_tokens_to_ids('[fr_XX]'),
+                        "en": model.tokenizer.convert_tokens_to_ids('[en_XX]')}
+    }
+    
+    
+    train_dl  = DataLoader(KeyMapDataset(MixedDataset(*train_datasets.values()), key_map = key_map), batch_size = 1, shuffle=True, num_workers=2, collate_fn=MBARTHEZQGDataLoaderCollator(model.tokenizer))
+    valid_dl  = DataLoader(KeyMapDataset(MixedDataset(*valid_datasets.values()), key_map = key_map), batch_size = 1, shuffle=False, num_workers=2, collate_fn=MBARTHEZQGDataLoaderCollator(model.tokenizer))
 
     # instanciate the differente callback for saving the model according to the different metrics
     checkpoint_callback_val_loss = ModelCheckpoint(monitor='val/loss', save_top_k=1, mode="min", filename="val-loss-checkpoint-{epoch:02d}-{val/loss:.2f}")
@@ -145,6 +153,8 @@ def main():
         checkpoint_callback_val_rouge,
         checkpoint_callback_val_sacrebleu
     ]
+    
+
     # instanciate the trainer
     trainer = pl.Trainer(
         logger=tb_logger, 
