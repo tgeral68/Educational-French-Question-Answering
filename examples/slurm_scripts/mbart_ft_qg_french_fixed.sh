@@ -1,11 +1,10 @@
 #!/bin/bash
 #SBATCH --account=bii@v100
-#SBATCH --qos=qos_gpu-dev 
 #SBATCH --job-name=mbart_ft_qg_french_fixed
 #SBATCH -C v100-32g
 #SBATCH --cpus-per-task=40  
 #SBATCH --gpus-per-node=4
-#SBATCH --time=1:30:00             # temps maximum d'execution demande (HH:MM:SS)
+#SBATCH --time=19:30:00             # temps maximum d'execution demande (HH:MM:SS)
 #SBATCH --output=mt5_stdout_%j_%x.out     # nom du fichier de sortie
 #SBATCH --error=mt5_stderr_%j_%x.out      # nom du fichier d'erreur 
 

@@ -126,7 +126,6 @@ class MBARTQG(pl.LightningModule):
         predictions = sum([b["generated_text"] for b in outputs], [])
         references = sum([b["ground_truth_text"] for b in outputs], [])
 
-        print("Prediction size:  %s \n References size: %s \n sample: %s"%(len(predictions), len(references), predictions[0]), flush=True)
         if self.validation_callback is not None:
             validation_log =  self.validation_callback(predictions, references)
             for k, v in validation_log.items():

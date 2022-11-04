@@ -142,12 +142,14 @@ def main():
     checkpoint_callback_val_loss = ModelCheckpoint(monitor='val/loss', save_top_k=1, mode="min", filename="val-loss-checkpoint-{epoch:02d}-{val_loss:.2f}")
     checkpoint_callback_val_sacrebleu = ModelCheckpoint(monitor='val/sacrebleu', save_top_k=1, mode="max", filename="val-sacrebleu-checkpoint-{epoch:02d}-{val_sacrebleu:.2f}")
     checkpoint_callback_val_rouge = ModelCheckpoint(monitor='val/rouge', save_top_k=1, mode="max", filename="val-rouge-checkpoint-{epoch:02d}-{val_rouge:.2f}")
-
+    early_stop_callback = EarlyStopping(monitor="val/rouge", min_delta=0.00, patience=5, verbose=False, mode="max")
+    
     callbacks = [
         lr_monitor,
         checkpoint_callback_val_loss,
         checkpoint_callback_val_rouge,
-        checkpoint_callback_val_sacrebleu
+        checkpoint_callback_val_sacrebleu,
+        early_stop_callback
     ]
     # instanciate the trainer
     trainer = pl.Trainer(
