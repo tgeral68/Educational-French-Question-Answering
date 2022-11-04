@@ -27,9 +27,9 @@ parser.add_argument('--enable-progress-bar', dest="enable_progress_bar", default
                     help='show progress bar' )
 
 
-parser.add_argument('--limit-train-batches', dest="limit_train_batches", default=20000, type=int,
+parser.add_argument('--limit-train-batches', dest="limit_train_batches", default=2000, type=int,
                     help='Limit the number of batches for a trianing epoch' )
-parser.add_argument('--log-every-n-steps', dest="log_every_n_steps", default=16, type=int,
+parser.add_argument('--log-every-n-steps', dest="log_every_n_steps", default=8, type=int,
                     help='log frequency' )
 
 
@@ -105,7 +105,7 @@ def main():
                 sampler = random_sampler,
                 input_lang = il, output_lang = ol
             )
-    print("TRAINING SETS ", args.validation_set, flush=True)
+    print("VALIDATION SETS ", args.validation_set, flush=True)
     for dataset_name in args.validation_set: 
         with open(os.path.join(data_folder, dataset_name)) as f:
             il, ol = dataset_name.split('.')[0].split('-')[-2], dataset_name.split('.')[0].split('-')[-1]
@@ -133,13 +133,15 @@ def main():
     lr_monitor = LearningRateMonitor(logging_interval='step')
 
     # instanciate the training and validation dataloader
+    print("Training set size " , len(KeyMapDataset(MixedDataset(*train_datasets.values()))))
+    print("Validation set size " , len(KeyMapDataset(MixedDataset(*valid_datasets.values()))))
     train_dl  = DataLoader(KeyMapDataset(MixedDataset(*train_datasets.values())), batch_size=4, shuffle=True, num_workers=4, collate_fn=MBARTQGDataLoaderCollator(model.tokenizer))
     valid_dl  = DataLoader(KeyMapDataset(MixedDataset(*valid_datasets.values())), batch_size=4, shuffle=False, num_workers=4, collate_fn=MBARTQGDataLoaderCollator(model.tokenizer))
 
     # instanciate the differente callback for saving the model according to the different metrics
-    checkpoint_callback_val_loss = ModelCheckpoint(monitor='val/loss', save_top_k=1, mode="min", filename="val-loss-checkpoint-{epoch:02d}-{val/loss:.2f}")
-    checkpoint_callback_val_sacrebleu = ModelCheckpoint(monitor='val/sacrebleu', save_top_k=1, mode="max", filename="val-sacrebleu-checkpoint-{epoch:02d}-{val/sacrebleu:.2f}")
-    checkpoint_callback_val_rouge = ModelCheckpoint(monitor='val/rouge', save_top_k=1, mode="max", filename="val-rouge-checkpoint-{epoch:02d}-{val/rouge:.2f}")
+    checkpoint_callback_val_loss = ModelCheckpoint(monitor='val/loss', save_top_k=1, mode="min", filename="val-loss-checkpoint-{epoch:02d}-{val_loss:.2f}")
+    checkpoint_callback_val_sacrebleu = ModelCheckpoint(monitor='val/sacrebleu', save_top_k=1, mode="max", filename="val-sacrebleu-checkpoint-{epoch:02d}-{val_sacrebleu:.2f}")
+    checkpoint_callback_val_rouge = ModelCheckpoint(monitor='val/rouge', save_top_k=1, mode="max", filename="val-rouge-checkpoint-{epoch:02d}-{val_rouge:.2f}")
 
     callbacks = [
         lr_monitor,

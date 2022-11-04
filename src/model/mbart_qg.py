@@ -5,6 +5,7 @@ from torch.optim.lr_scheduler import LinearLR
 from torch.nn import BCELoss
 import json
 
+import torch.distributed
 import pytorch_lightning as pl
 from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 from .optim_utils import OPTIM_MAP
@@ -116,16 +117,24 @@ class MBARTQG(pl.LightningModule):
         self.log("val/loss",  loss.item(), reduce_fx="mean", sync_dist=True)
         return {"generated_text": generated_text, "ground_truth_text":ground_truth_text}
     
-    def validation_epoch_end(self, batch, *kargs, **kwargs):
-        predictions = sum([b["generated_text"] for b in batch], [])
-        references = sum([b["ground_truth_text"] for b in batch], [])
+    def validation_epoch_end(self, outputs, *kargs, **kwargs):
+        if torch.distributed.is_initialized():
+            torch.distributed.barrier()
+            gather = [None] * torch.distributed.get_world_size()
+            torch.distributed.all_gather_object(gather, outputs)
+            outputs = [x for xs in gather for x in xs]
+        predictions = sum([b["generated_text"] for b in outputs], [])
+        references = sum([b["ground_truth_text"] for b in outputs], [])
+
+        print("Prediction size:  %s \n References size: %s \n sample: %s"%(len(predictions), len(references), predictions[0]), flush=True)
         if self.validation_callback is not None:
             validation_log =  self.validation_callback(predictions, references)
             for k, v in validation_log.items():
                 self.log("val/"+k, v, sync_dist=True)
-        if self.log_dir != None:
-            df = pd.DataFrame({"predictions": predictions, "references": references})
-            df.to_csv(os.path.join(self.log_dir, "validation_prediction-"+str(self.current_epoch)+".csv"))
+        if self.log_dir != None :
+            if(not torch.distributed.is_initialized() or (torch.distributed.is_initialized() and torch.distributed.get_rank() == 0)):
+                df = pd.DataFrame({"predictions": predictions, "references": references})
+                df.to_csv(os.path.join(self.log_dir, "validation_prediction-"+str(self.current_epoch)+".csv"))
 
     def on_after_backward(self, *kargs, **kwargs):
         self.model.model.shared.weight._grad[:-1] = 0
