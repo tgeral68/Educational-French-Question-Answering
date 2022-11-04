@@ -54,6 +54,22 @@ parser.add_argument('--validation-set', metavar='validation_set', type=str, narg
                     help='the name of the validation set to use')
 args = parser.parse_args()
 
+### UTILITIES FUNCTIONS DO NOT USE LAMBDA FUNCTION IN MULTIPROCESSING
+def random_sampler(x):
+    return [x[random.randint(0, len(x) - 1)]]
+def first_sampler(x):
+    return [x[0]]
+def sacrebleu_select(x):
+    return x['score']
+def rouge_select(x):
+    return x['rougeL']
+
+class SpacyTokenizer:
+    # A simple tokenizer class for ROUGE evaluation
+    def __init__(self):
+        self.nlp = spacy.load("fr_core_news_lg")
+    def __call__(self, x):
+        return [t.text for t in self.nlp.tokenizer(x)]
 
 def main():
 
@@ -61,17 +77,12 @@ def main():
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
     # Loading the metrics
-    class SpacyTokenizer:
-        # A simple tokenizer class for ROUGE evaluation
-        def __init__(self):
-            self.nlp = spacy.load("fr_core_news_lg")
-        def __call__(self, x):
-            return [t.text for t in self.nlp.tokenizer(x)]
     st = SpacyTokenizer()
+
     # Use of the different HuggingFace metrics here sacrebleu and rouge
     validation_metrics = MultiHFMetric(
-        sacrebleu = HFMetric('sacrebleu', lambda x : x['score'], tokenize = 'intl'),
-        rouge = HFMetric('rouge', lambda x : x['rougeL'], tokenizer = st)
+        sacrebleu = HFMetric('sacrebleu', sacrebleu_select, tokenize = 'intl'),
+        rouge = HFMetric('rouge', rouge_select, tokenizer = st)
     )
 
 
@@ -84,13 +95,14 @@ def main():
     train_datasets = {}
     valid_datasets = {}
 
+
     for dataset_name in args.training_set: 
         with open(os.path.join(data_folder, dataset_name)) as f:
             il, ol = dataset_name.split('.')[0].split('-')[-2], dataset_name.split('.')[0].split('-')[-1]
             data = json.load(f)
             train_datasets[dataset_name.split('.')[0]] = FQAGPBDataset(
                 data["train"],
-                sampler = lambda x : [x[random.randint(0, len(x) - 1)]],
+                sampler = random_sampler,
                 input_lang = il, output_lang = ol
             )
     for dataset_name in args.validation_set: 
@@ -99,7 +111,7 @@ def main():
             data = json.load(f)
             valid_datasets[dataset_name.split('.')[0]] = FQAGPBDataset(
                 data["valid"],
-                sampler = lambda x : [x[0]],
+                sampler = first_sampler,
                 input_lang = il, output_lang = ol
             )
 
@@ -134,7 +146,6 @@ def main():
         checkpoint_callback_val_rouge,
         checkpoint_callback_val_sacrebleu
     ]
-
     # instanciate the trainer
     trainer = pl.Trainer(
         logger=tb_logger, 
@@ -149,6 +160,7 @@ def main():
         devices=-1,
         auto_select_gpus=False
     )
+
     # start training
     trainer.fit(
         model,

@@ -13,8 +13,8 @@
 source ~/.bashrc
 conda activate pytorch-dev
 cd $WORK/repositories/Educational-French-Question-Answering/
-export EFQADATA=$WORK/LTC-DATA
-export EFQALOG=$WORK/LTC-LOGS
+export EFQADATA=$WORK/LTC/LTC-DATA
+export EFQALOG=$WORK/LTC/LTC-LOGS
 
 if [ -z "$1" ]
     then
