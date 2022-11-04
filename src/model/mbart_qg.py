@@ -103,8 +103,9 @@ class MBARTQG(pl.LightningModule):
             generated_batch = self.model.generate(
                 input_ids = batch['input_ids'],
                 attention_mask = batch['attention_mask'],
-                forced_bos_token_id=self.tokenizer.lang_code_to_id[LANGUAGE_MAP['fr']]
-                )
+                forced_bos_token_id=self.tokenizer.lang_code_to_id[LANGUAGE_MAP['fr']],
+                max_new_tokens=200
+            )
         generated_text = self.tokenizer.batch_decode(generated_batch, skip_special_tokens=True)
         ground_truth_text = self.tokenizer.batch_decode(batch['labels'], skip_special_tokens=True)
 
