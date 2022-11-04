@@ -28,32 +28,41 @@ parser.add_argument('--training-set', metavar='training_set', type=str, nargs='+
                         "piaf-fr-en.pb.json", "piaf-fr-fr.pb.json",
                         "squad-en-en.pb.json", "squad-en-fr.pb.json"
                     ]
-                    help='the name of the trianing set to use')
+                    help='the name of the training set to use')
 parser.add_argument('--validation-set', metavar='validation_set', type=str, nargs='+',
                     default=[
                         "fquad-fr-fr.pb.json", "piaf-fr-fr.pb.json"
                     ]
-                    help='the name of the trianing set to use')
+                    help='the name of the validation set to use')
 
 args = parser.parse_args()
 
 
 def main():
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+    # Loading the metrics
     class SpacyTokenizer():
+        # A simple tokenizer class for ROUGE evaluation
         def __init__(self):
             self.nlp = spacy.load("fr_core_news_lg")
         def __call__(self, x):
             return [t.text for t in self.nlp.tokenizer(x)]
     st = SpacyTokenizer()
+    # Use of the different HuggingFace metrics here sacrebleu and rouge
     validation_metrics = MultiHFMetric(
         sacrebleu = HFMetric('sacrebleu', lambda x : x['score'], tokenize = 'intl'),
         rouge = HFMetric('rouge', lambda x : x['rougeL'], tokenizer = st)
     )
 
+    # TODO : Change the definition of the env variables
     os.environ['EFQADATA'] = '/people/gerald/Documents/repositories/Educational-French-Question-Answering/dataset'
+
+    # Raw data are located in the folder specified by EFQADATA env var in the folder source
     data_folder = os.path.expandvars("$EFQADATA/source")
 
+
+    # Loading the training and validation sets
     train_datasets = {}
     valid_datasets = {}
 
@@ -72,25 +81,29 @@ def main():
             data = json.load(f)
             valid_datasets[dataset_name.split('.')[0]] = FQAGPBDataset(
                 data["valid"],
-                sampler = lambda x : [x[random.randint(0, len(x) - 1)]],
+                sampler = lambda x : [x[0]],
                 input_lang = il, output_lang = ol
             )
 
+    # Create the model
     model = MBARTQG(
-        pretrained_name = "facebook/mbart-large-50-many-to-many-mmt",
-        fixed_encoder = args.fixed_encoder,
-        validation_callback = validation_metrics,
-        log_dir = os.path.join(os.path.expandvars("$QA_LOG"), args.name)
+        pretrained_name = "facebook/mbart-large-50-many-to-many-mmt", # the name of the pretrain model
+        fixed_encoder = args.fixed_encoder, # Do we optimize the encoder if false finetuned all the model
+        validation_callback = validation_metrics, # A validation metric callback must output a dictionary {metric_name_1: value_1, metric_name_2 value_2}
+        log_dir = os.path.join(os.path.expandvars("$QA_LOG"), args.name) # The log directory of the model it will save the validation output within it
     )
 
-    tb_logger = pl_loggers.TensorBoardLogger(save_dir=os.path.expandvars("$QA_LOG"), name=args.name)
+    # initialise the logger (using the default tensorboard logger from lightning)
+    tb_logger = pl_loggers.TensorBoardLogger(save_dir=os.path.expandvars("$QA_LOG"), name=args.name) 
     tb_logger.log_hyperparams(vars(args))
+    # We also log the learning rate
     lr_monitor = LearningRateMonitor(logging_interval='step')
 
+    # instanciate the training and validation dataloader
     train_dl  = DataLoader(KeyMapDataset(MixedDataset(*train_datasets.values())), batch_size = 2, shuffle=True, num_workers=2, collate_fn=MBARTQGDataLoaderCollator(model.tokenizer))
     valid_dl  = DataLoader(KeyMapDataset(MixedDataset(*valid_datasets.values())), batch_size = 2, shuffle=False, num_workers=2, collate_fn=MBARTQGDataLoaderCollator(model.tokenizer))
 
-
+    # instanciate the differente callback for saving the model according to the different metrics
     checkpoint_callback_val_loss = ModelCheckpoint(monitor='val/loss', save_top_k=2, mode="min", filename="val-loss-checkpoint-{epoch:02d}-{val_loss:.2f}")
     checkpoint_callback_val_sacrebleu = ModelCheckpoint(monitor='val/sacrebleu', save_top_k=2, mode="max", filename="val-sacrebleu-checkpoint-{epoch:02d}-{val_loss:.2f}")
     checkpoint_callback_val_rouge = ModelCheckpoint(monitor='val/rouge', save_top_k=2, mode="max", filename="val-rouge-checkpoint-{epoch:02d}-{val_loss:.2f}")
@@ -102,7 +115,7 @@ def main():
         checkpoint_callback_val_sacrebleu
     ]
 
-
+    # instanciate the trainer
     trainer = pl.Trainer(
         logger=tb_logger, 
         log_every_n_steps=16, 
@@ -113,6 +126,7 @@ def main():
         accumulate_grad_batches=64,
         accelerator='cpu'
     )
+    # start training
     trainer.fit(
         model,
         train_dl,
