@@ -107,3 +107,17 @@ class KeyMapDataset:
         for k, v in self.key_map.items():
             data[k] = v[data[k]]
         return data
+
+class PrepositionalTokenDataset:
+    def __init__(self, dataset, **kwargs):
+        self.mapping = kwargs
+        self.dataset = dataset
+    
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, index):
+        data = self.dataset[index]
+        for k, v in self.mapping.items():
+            data[k] =  v + data[k]
+        return data

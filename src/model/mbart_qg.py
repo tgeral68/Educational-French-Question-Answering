@@ -57,13 +57,14 @@ class MBARTQG(pl.LightningModule):
             validation_callback = None, 
             log_dir = None,
             optimizer = "adamw",
+            additional_special_tokens = [],
             learning_rate = 1e-4
         ):
         super().__init__()
         self.fixed_encoder = fixed_encoder
         self.model = MBartForConditionalGeneration.from_pretrained(pretrained_name)
         self.tokenizer = MBart50TokenizerFast.from_pretrained(pretrained_name)
-        self.tokenizer.add_tokens(['<hl>'], special_tokens=True)
+        self.tokenizer.add_tokens(['<hl>'] + additional_special_tokens, special_tokens=True)
         self.model.resize_token_embeddings(len(self.tokenizer))
         self.validation_callback = validation_callback
         self.log_dir = log_dir

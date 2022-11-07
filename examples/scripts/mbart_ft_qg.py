@@ -12,7 +12,7 @@ from pytorch_lightning import Trainer, seed_everything
 
 
 from src.data_utils.pb_corpus import FQAGPBDataset
-from src.data_utils.corpus import MixedDataset, KeyMapDataset
+from src.data_utils.corpus import MixedDataset, KeyMapDataset, PrepositionalTokenDataset
 from src.model.mbart_qg import MBARTQG, MBARTQGDataLoaderCollator
 from src.eval_utils.evaluate_utils import HFMetric, MultiHFMetric
 
@@ -53,6 +53,14 @@ parser.add_argument('--validation-set', metavar='validation_set', type=str, narg
                         "fquad-fr-fr.pb.json", "piaf-fr-fr.pb.json"
                     ],
                     help='the name of the validation set to use')
+parser.add_argument('--early-stop-criterion', metavar='esc', type=str,
+                    default="rouge",
+                    help='the name of the criterion used for early stopping (using validation set) can be rouge/sacrebleu')
+parser.add_argument('--batch-size', metavar='batch_size', type=int,
+                    default=4,
+                    help='the batch_size')
+parser.add_argument('--use-task-token', metavar='use_task_token', default=False, action='store_true',
+                    help='do we use a special token for the encoder here [question_generation]'))
 args = parser.parse_args()
 
 ### UTILITIES FUNCTIONS DO NOT USE LAMBDA FUNCTION IN MULTIPROCESSING
@@ -106,6 +114,11 @@ def main():
                 sampler = random_sampler,
                 input_lang = il, output_lang = ol
             )
+            if args.use_task_token:
+                train_datasets[dataset_name.split('.')[0]] =\
+                    PrepositionalTokenDataset(train_datasets[dataset_name.split('.')[0]], 
+                                              question = '[question_generation]')
+
     print("VALIDATION SETS ", args.validation_set, flush=True)
     for dataset_name in args.validation_set: 
         with open(os.path.join(data_folder, dataset_name)) as f:
@@ -116,7 +129,10 @@ def main():
                 sampler = first_sampler,
                 input_lang = il, output_lang = ol
             )
-
+            if args.use_task_token:
+                valid_datasets[dataset_name.split('.')[0]] =\
+                    PrepositionalTokenDataset(train_datasets[dataset_name.split('.')[0]],
+                                              question = '[question_generation]')
     # Create the model
     model = MBARTQG(
         pretrained_name = "facebook/mbart-large-50-many-to-many-mmt", # the name of the pretrain model
@@ -124,6 +140,7 @@ def main():
         validation_callback = validation_metrics, # A validation metric callback must output a dictionary {metric_name_1: value_1, metric_name_2 value_2}
         log_dir = os.path.join(log_folder, args.name), # The log directory of the model it will save the validation output within it
         optimizer = args.optimizer,
+        additional_special_tokens = ['[question_generation]'] if self.use_task_token else []
         learning_rate = args.lr
     )
 
@@ -136,14 +153,14 @@ def main():
     # instanciate the training and validation dataloader
     print("Training set size " , len(KeyMapDataset(MixedDataset(*train_datasets.values()))))
     print("Validation set size " , len(KeyMapDataset(MixedDataset(*valid_datasets.values()))))
-    train_dl  = DataLoader(KeyMapDataset(MixedDataset(*train_datasets.values())), batch_size=4, shuffle=True, num_workers=4, collate_fn=MBARTQGDataLoaderCollator(model.tokenizer))
-    valid_dl  = DataLoader(KeyMapDataset(MixedDataset(*valid_datasets.values())), batch_size=4, shuffle=False, num_workers=4, collate_fn=MBARTQGDataLoaderCollator(model.tokenizer))
+    train_dl  = DataLoader(KeyMapDataset(MixedDataset(*train_datasets.values())), batch_size=args.batch_size, shuffle=True, num_workers=4, collate_fn=MBARTQGDataLoaderCollator(model.tokenizer))
+    valid_dl  = DataLoader(KeyMapDataset(MixedDataset(*valid_datasets.values())), batch_size=args.batch_size, shuffle=False, num_workers=4, collate_fn=MBARTQGDataLoaderCollator(model.tokenizer))
 
     # instanciate the differente callback for saving the model according to the different metrics
     checkpoint_callback_val_loss = ModelCheckpoint(monitor='val/loss', save_top_k=1, mode="min", filename="val-loss-checkpoint-{epoch:02d}-{val_loss:.2f}")
     checkpoint_callback_val_sacrebleu = ModelCheckpoint(monitor='val/sacrebleu', save_top_k=1, mode="max", filename="val-sacrebleu-checkpoint-{epoch:02d}-{val_sacrebleu:.2f}")
     checkpoint_callback_val_rouge = ModelCheckpoint(monitor='val/rouge', save_top_k=1, mode="max", filename="val-rouge-checkpoint-{epoch:02d}-{val_rouge:.2f}")
-    early_stop_callback = EarlyStopping(monitor="val/rouge", min_delta=0.00, patience=5, verbose=False, mode="max")
+    early_stop_callback = EarlyStopping(monitor="val/" + args.esc, min_delta=0.00, patience=5, verbose=False, mode="max")
     
     callbacks = [
         lr_monitor,

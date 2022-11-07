@@ -18,8 +18,8 @@ export EFQALOG=$WORK/LTC/LTC-LOGS
 
 if [ -z "$1" ]
     then
-        srun python -m examples.scripts.mbart_ft_qg --name mbart_ft_qg_en_fr_fixed --training-set fquad-fr-fr.pb.json squad-en-en.pb.json piaf-fr-fr.pb.json --validation-set fquad-fr-fr.pb.json piaf-fr-fr.pb.json --fixed-encoder
+        srun python -m examples.scripts.mbart_ft_qg --early-stopping-criterion sacrebleu --name mbart_ft_qg_en_fr_fixed --training-set fquad-fr-fr.pb.json squad-en-en.pb.json piaf-fr-fr.pb.json --validation-set fquad-fr-fr.pb.json piaf-fr-fr.pb.json --fixed-encoder
     else
-        srun python -m examples.scripts.mbart_ft_qg --name mbart_ft_qg_en_fr_fixed --training-set fquad-fr-fr.pb.json piaf-fr-fr.pb.json  squad-en-en.pb.json --validation-set fquad-fr-fr.pb.json piaf-fr-fr.pb.json --fixed-encoder --resume-from-checkpoint $1
+        srun python -m examples.scripts.mbart_ft_qg --early-stopping-criterion sacrebleu --name mbart_ft_qg_en_fr_fixed --training-set fquad-fr-fr.pb.json piaf-fr-fr.pb.json  squad-en-en.pb.json --validation-set fquad-fr-fr.pb.json piaf-fr-fr.pb.json --fixed-encoder --resume-from-checkpoint $1
 fi
 
