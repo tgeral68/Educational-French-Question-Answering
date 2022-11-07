@@ -43,8 +43,8 @@ parser.add_argument('--batch-size', dest="batch_size", default=16, type=int)
 parser.add_argument('--max-epochs', dest="max_epochs", default=50, type=int,
                     help='number of training epoch' )
 
-parser.add_argument('--limit-train-batches', dest='limit_train_batches', default=800, type=int)
-parser.add_argument('--limit-val-batches', dest='limit_val_batches', default=150, type=int)
+parser.add_argument('--limit-train-batches', dest='limit_train_batches', default=2000, type=int)
+parser.add_argument('--limit-val-batches', dest='limit_val_batches', default=10000, type=int)
 parser.add_argument('--early-stop-criterion', dest='esc', type=str,
                     default="rouge",
                     help='the name of the criterion used for early stopping (using validation set) can be rouge/sacrebleu')
@@ -86,7 +86,8 @@ def main():
 
     #Loading the model
     model = BarthezQA(#load_pretraned_model='/people/tamames/project/saved_models/barthez-e5',
-        validation_callback = validation_metrics
+        validation_callback = validation_metrics,
+        log_dir = log_folder
         ) # ajouter ou log
 
     # Loading the datasets
