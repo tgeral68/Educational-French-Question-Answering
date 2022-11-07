@@ -60,7 +60,7 @@ parser.add_argument('--batch-size', metavar='batch_size', type=int,
                     default=4,
                     help='the batch_size')
 parser.add_argument('--use-task-token', metavar='use_task_token', default=False, action='store_true',
-                    help='do we use a special token for the encoder here [question_generation]'))
+                    help='do we use a special token for the encoder here [question_generation]')
 args = parser.parse_args()
 
 ### UTILITIES FUNCTIONS DO NOT USE LAMBDA FUNCTION IN MULTIPROCESSING
@@ -140,7 +140,7 @@ def main():
         validation_callback = validation_metrics, # A validation metric callback must output a dictionary {metric_name_1: value_1, metric_name_2 value_2}
         log_dir = os.path.join(log_folder, args.name), # The log directory of the model it will save the validation output within it
         optimizer = args.optimizer,
-        additional_special_tokens = ['[question_generation]'] if self.use_task_token else []
+        additional_special_tokens = ['[question_generation]'] if(self.use_task_token) else [],
         learning_rate = args.lr
     )
 
