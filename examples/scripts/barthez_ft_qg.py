@@ -9,6 +9,7 @@ import pytorch_lightning as pl
 from pytorch_lightning import loggers as pl_loggers
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 from pytorch_lightning import Trainer, seed_everything
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 
 from src.model.barthez_qg import DataCollator, BarthezQA
 # from src.data_utils.pb_corpus import FQAGPBDataset
@@ -44,6 +45,9 @@ parser.add_argument('--max-epochs', dest="max_epochs", default=50, type=int,
 
 parser.add_argument('--limit-train-batches', dest='limit_train_batches', default=800, type=int)
 parser.add_argument('--limit-val-batches', dest='limit_val_batches', default=150, type=int)
+parser.add_argument('--early-stop-criterion', dest='esc', type=str,
+                    default="rouge",
+                    help='the name of the criterion used for early stopping (using validation set) can be rouge/sacrebleu')
 
 args = parser.parse_args()
 
@@ -99,16 +103,14 @@ def main():
                                 batch_size=args.batch_size,
                                 drop_last=False,
                                 collate_fn = DataCollator(model.tokenizer),
-                                shuffle=True,
-                                num_workers=2
+                                shuffle=True # num_workers=2
                                 )
 
     valid_dataloader = DataLoader(dataset["valid"],
                                 batch_size=args.batch_size,
                                 drop_last=False,
                                 collate_fn = DataCollator(model.tokenizer),
-                                shuffle=True,
-                                num_workers=2
+                                shuffle=True
                                 )
     
     ### FROM THOMAS
@@ -122,12 +124,14 @@ def main():
     checkpoint_callback_val_loss = ModelCheckpoint(monitor='val_loss', save_top_k=2, mode="min", filename="val-loss-checkpoint-{epoch:02d}-{val_loss:.2f}")
     checkpoint_callback_val_sacrebleu = ModelCheckpoint(monitor='val_sacrebleu', save_top_k=2, mode="max", filename="val-sacrebleu-checkpoint-{epoch:02d}-{val_sacrebleu:.2f}")
     checkpoint_callback_val_rouge = ModelCheckpoint(monitor='val_rouge', save_top_k=2, mode="max", filename="val-rouge-checkpoint-{epoch:02d}-{val_rouge:.2f}")
+    early_stop_callback = EarlyStopping(monitor="val_" + args.esc, min_delta=0.00, patience=5, verbose=False, mode="max")
 
     callbacks = [
         lr_monitor,
         checkpoint_callback_val_loss,
         checkpoint_callback_val_rouge,
-        checkpoint_callback_val_sacrebleu
+        checkpoint_callback_val_sacrebleu,
+        early_stop_callback
     ]
     ### END FROM THOMAS
     
@@ -145,7 +149,7 @@ def main():
         accelerator='gpu' if(not args.cpu_only) else 'cpu',
         devices=args.ndevices,
         auto_select_gpus=True,
-        strategy="ddp" # strategy to train the model on different machine
+        # strategy="ddp" # strategy to train the model on different machine
     )
 
     trainer.fit(

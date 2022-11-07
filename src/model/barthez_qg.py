@@ -58,7 +58,7 @@ class BarthezQA(pl.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        optimizer = AdamW(self.model.parameters(), lr=5e-5)
+        optimizer = AdamW(self.model.parameters(), lr=1e-4)
         scheduler = {
             "scheduler": LinearLR(optimizer, total_iters = 1000, start_factor= 1.0 / 1000.),
             "interval": "step",
