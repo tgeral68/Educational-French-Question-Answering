@@ -53,13 +53,13 @@ parser.add_argument('--validation-set', metavar='validation_set', type=str, narg
                         "fquad-fr-fr.pb.json", "piaf-fr-fr.pb.json"
                     ],
                     help='the name of the validation set to use')
-parser.add_argument('--early-stop-criterion', metavar='esc', type=str,
+parser.add_argument('--early-stop-criterion', dest='esc', type=str,
                     default="rouge",
                     help='the name of the criterion used for early stopping (using validation set) can be rouge/sacrebleu')
-parser.add_argument('--batch-size', metavar='batch_size', type=int,
+parser.add_argument('--batch-size', dest='batch_size', type=int,
                     default=4,
                     help='the batch_size')
-parser.add_argument('--use-task-token', metavar='use_task_token', default=False, action='store_true',
+parser.add_argument('--use-task-token', dest='use_task_token', default=False, action='store_true',
                     help='do we use a special token for the encoder here [question_generation]')
 args = parser.parse_args()
 
