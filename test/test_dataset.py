@@ -2,6 +2,7 @@ import unittest
 import torch
 
 from src.data_utils import corpus, pb_corpus
+from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 
 class TestDataset(unittest.TestCase):
     
@@ -121,7 +122,7 @@ class TestDataset(unittest.TestCase):
         }]
         self.dataset = pb_corpus.FQAGPBDataset(
                 self.data,
-                sampler = lambda x : x[0],
+                sampler = lambda x : [x[0]],
                 input_lang = "fr", output_lang = "fr"
             )
     def tearDown(self):
@@ -129,4 +130,15 @@ class TestDataset(unittest.TestCase):
 
     def test_prepositional_dataset(self):
         pd = corpus.PrepositionalTokenDataset(self.dataset, question="[question_generation]")
-        print(pd[0])
+        assert(pd[0]['question'] == "[question_generation]"+self.dataset[0]['question'])
+    
+    def test_tokenizer_mbart(self):
+        pd = corpus.PrepositionalTokenDataset(self.dataset, question="[question_generation]")
+        self.tokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
+        self.tokenizer.add_tokens(['<hl>'] + ["[question_generation]"], special_tokens=True)
+
+        tokenized_data = self.tokenizer(pd[0]['question'])['input_ids']
+        detokenized_data_keep = self.tokenizer.decode(tokenized_data, skip_special_tokens=False)
+        detokenized_data_skip = self.tokenizer.decode(tokenized_data, skip_special_tokens=True)
+        assert(detokenized_data_skip == 'Quel est la conséquence de l\'échec de la révolution populaire Hongroise.')
+        assert(detokenized_data_keep == 'en_XX[question_generation] Quel est la conséquence de l\'échec de la révolution populaire Hongroise.</s>')
