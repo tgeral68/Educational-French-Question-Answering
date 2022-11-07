@@ -42,6 +42,9 @@ class MBARTQGDataLoaderCollator:
         target_input_ids[:, 0] = torch.LongTensor(output_lang)
         
         return {
+            "qid": [b['id'] for b in batch_list],
+            "qtype": [b["question_type"] for b in batch_list],
+            "default_selection" : [b["is_default"] for b in batch_list],
             "input_ids": source_input_ids,
             "attention_mask": source.attention_mask,
             "labels": target_input_ids
@@ -62,8 +65,10 @@ class MBARTQG(pl.LightningModule):
         ):
         super().__init__()
         self.fixed_encoder = fixed_encoder
-        self.model = MBartForConditionalGeneration.from_pretrained(pretrained_name)
-        self.tokenizer = MBart50TokenizerFast.from_pretrained(pretrained_name)
+        print("INIT MBART QG")
+        self.model = MBartForConditionalGeneration.from_pretrained(pretrained_name, local_files_only=True)
+        print("LOADING THE TOKENIZER AT", pretrained_name)
+        self.tokenizer = MBart50TokenizerFast.from_pretrained(pretrained_name, local_files_only=True)
         self.tokenizer.add_tokens(['<hl>'] + additional_special_tokens, special_tokens=True)
         self.model.resize_token_embeddings(len(self.tokenizer))
         self.validation_callback = validation_callback
@@ -135,6 +140,20 @@ class MBARTQG(pl.LightningModule):
             if(not torch.distributed.is_initialized() or (torch.distributed.is_initialized() and torch.distributed.get_rank() == 0)):
                 df = pd.DataFrame({"predictions": predictions, "references": references})
                 df.to_csv(os.path.join(self.log_dir, "validation_prediction-"+str(self.current_epoch)+".csv"))
+
+    def predict_step(self, batch, batch_idx):
+        with torch.no_grad():
+            generated_batch = self.model.generate(
+                input_ids = batch['input_ids'],
+                attention_mask = batch['attention_mask'],
+                forced_bos_token_id=self.tokenizer.lang_code_to_id[LANGUAGE_MAP['fr']],
+                max_new_tokens=200
+            )
+
+        generated_text = self.tokenizer.batch_decode(generated_batch, skip_special_tokens=True)
+        ground_truth_text = self.tokenizer.batch_decode(batch['labels'], skip_special_tokens=True)
+        return [{"qid":batch["qid"][i], "qtype":batch["qtype"][i], "default_selection": batch["default_selection"][i],
+                 "generated_text": generated_text[i], "ground_truth_text":ground_truth_text[i]} for i in range(len(batch["input_ids"]))]
 
     def on_after_backward(self, *kargs, **kwargs):
         if(self.fixed_encoder):

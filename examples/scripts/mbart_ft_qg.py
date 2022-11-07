@@ -53,7 +53,7 @@ parser.add_argument('--validation-set', metavar='validation_set', type=str, narg
                         "fquad-fr-fr.pb.json", "piaf-fr-fr.pb.json"
                     ],
                     help='the name of the validation set to use')
-parser.add_argument('--early-stop-criterion', dest='esc', type=str,
+parser.add_argument('--early-stopping-criterion', dest='esc', type=str,
                     default="rouge",
                     help='the name of the criterion used for early stopping (using validation set) can be rouge/sacrebleu')
 parser.add_argument('--batch-size', dest='batch_size', type=int,
@@ -140,7 +140,7 @@ def main():
         validation_callback = validation_metrics, # A validation metric callback must output a dictionary {metric_name_1: value_1, metric_name_2 value_2}
         log_dir = os.path.join(log_folder, args.name), # The log directory of the model it will save the validation output within it
         optimizer = args.optimizer,
-        additional_special_tokens = ['[question_generation]'] if(self.use_task_token) else [],
+        additional_special_tokens = ['[question_generation]'] if(args.use_task_token) else [],
         learning_rate = args.lr
     )
 

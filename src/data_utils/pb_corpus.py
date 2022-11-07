@@ -66,18 +66,16 @@ def get_cobj(sentence):
     return cobj_list
 
 
-
-
-
 class FQAGPBDataset():
-    nlp = spacy.load("fr_core_news_lg")
+
+    nlp_parse = spacy.load("fr_core_news_lg")
     @staticmethod
     def rverb(context, start_pos, end_pos):
         response = []
         selected_sentences = []
         
         t = 0
-        for sent in nlp_parse(context).sents:
+        for sent in FQAGPBDataset.nlp_parse(context).sents:
             t += len(sent.text_with_ws)  
             if t > start_pos:
                 selected_sentences.append(sent)
@@ -96,7 +94,7 @@ class FQAGPBDataset():
         selected_sentences = []
         
         t = 0
-        for sent in nlp_parse(context).sents:
+        for sent in FQAGPBDataset.nlp_parse(context).sents:
             t += len(sent.text_with_ws)  
             if t > start_pos:
                 selected_sentences.append(sent)
@@ -109,15 +107,16 @@ class FQAGPBDataset():
         if len(response) == 0 :
             return [f"{context[:start_pos]}<hl>{context[start_pos: end_pos]}<hl>{context[end_pos:]}"], True
         return response, False
+
     @staticmethod
     def default_processing(context, start_pos, end_pos):
         return [f"{context[:start_pos]}<hl>{context[start_pos: end_pos]}<hl>{context[end_pos:]}"], True
     @staticmethod
     def sentences(context, start_pos, end_pos):
-        #print(['-> '+i.text for i in nlp_parse(context).sents])
+        #print(['-> '+i.text for i in FQAGPBDataset.nlp_parse(context).sents])
         selected_sentences = []
         t = 0
-        for sent in nlp_parse(context).sents:
+        for sent in FQAGPBDataset.nlp_parse(context).sents:
             t += len(sent.text_with_ws)  
             if t > start_pos:
                 selected_sentences.append(sent)
@@ -129,7 +128,7 @@ class FQAGPBDataset():
     def entities(context, start_pos, end_pos):
         selected_sentences = []
         t = 0
-        for sent in nlp(context).sents:
+        for sent in FQAGPBDataset.nlp_parse(context).sents:
             t += len(sent.text_with_ws)  
             if t > start_pos:
                 selected_sentences.append(sent)
@@ -146,7 +145,7 @@ class FQAGPBDataset():
         selected_sentences = []
         t = 0
 
-        for sent in nlp(context).sents:
+        for sent in FQAGPBDataset.nlp_parse(context).sents:
             t += len(sent.text_with_ws)  
             if t > start_pos:
                 selected_sentences.append(sent)
@@ -175,7 +174,8 @@ class FQAGPBDataset():
         input_processing=None,
         sampler = lambda x : x,
         input_lang="fr",
-        output_lang="fr"
+        output_lang="fr",
+        first_item_only=True
         ):
         self.dataset = PBDataset(data)
         self.higlight_token = higlight_token
@@ -184,7 +184,7 @@ class FQAGPBDataset():
         self.sampler = sampler
         self.input_lang = input_lang
         self.output_lang = output_lang
-
+        self.first_item_only = first_item_only
     def __len__(self):
         return len(self.dataset)
     
@@ -206,7 +206,10 @@ class FQAGPBDataset():
                 context, is_default = self.input_processing(context, start_pos, end_pos)
                 
                 items += [{"is_default": is_default, "id": index, "question": question, "context": ctx, "question_type": question_type} for ctx in context]
-        return {**items[0], 'input_lang':self.input_lang, 'output_lang': self.output_lang}
+        if self.first_item_only:
+            return {**items[0], 'input_lang':self.input_lang, 'output_lang': self.output_lang}
+        else: 
+            return [{**item,  'input_lang':self.input_lang, 'output_lang': self.output_lang} for item in items]
                 
             
         
