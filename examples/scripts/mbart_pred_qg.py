@@ -81,6 +81,7 @@ def main():
         print("Starting the inference", flush=True)
         trainer =  Trainer(accelerator="gpu", devices=1)
         predictions = trainer.predict(model, data_loader)
+        predictions = sum(predictions, [])
         print("Saving the prediction at", os.path.join(log_folder, 'prediction-'+dataset_name+'.csv'))
         pd.DataFrame(predictions).to_csv(os.path.join(log_folder, 'prediction-'+dataset_name+'.csv'), index=False)
         
