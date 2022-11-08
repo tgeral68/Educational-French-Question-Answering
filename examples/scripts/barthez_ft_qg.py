@@ -87,8 +87,8 @@ def main():
     #Loading the model
     model = BarthezQA(#load_pretraned_model='/people/tamames/project/saved_models/barthez-e5',
         validation_callback = validation_metrics,
-        log_dir = log_folder
-        ) # ajouter ou log
+        log_dir = log_folder+args.name
+        )
 
     # Loading the datasets
     path = args.datasets_path
